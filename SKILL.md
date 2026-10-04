@@ -81,8 +81,12 @@ Tiêu chí nào ≤ 3 thì sửa (tối đa 2 vòng). Ghi điểm và điểm y�
 ## 7. Render
 
 ```bash
-bash .agents/skills/text-to-video-vi/scripts/build.sh <slug> --render
+bash .agents/skills/text-to-video-vi/scripts/build.sh <slug> --render --safe
 ```
+
+> **QUY TẮC AN TOÀN TÀI NGUYÊN (Worker Throttling - Chống Đơ Máy):**
+> - Trên máy Mac 8GB RAM, luôn thêm cờ `--safe` (hoặc để tự động nhận diện 1 worker). `build.sh` đã tự động phát hiện RAM ≤ 8GB và gán QoS `taskpolicy -c utility` để bảo vệ giao diện macOS, đảm bảo con trỏ chuột và ứng dụng nền không bị đơ giật.
+> - Chạy 1 worker chỉ tốn ~600MB RAM (thay vì 3.5GB với 4 worker), render cực nhanh (~30 giây) mà không bị nghẽn bộ nhớ. TUYỆT ĐỐI không render nhiều video cùng lúc.
 
 Kết quả: `samples/<slug>.mp4` (bản gốc để đăng) và `samples/<slug>_preview.mp4` (bản nhẹ để gửi xem). Đọc dòng `Thời lượng · Khổ · Âm lượng`: khổ phải 1080x1920, mean_volume khoảng -14 đến -20 dB.
 Không dùng lệnh `verify` của explainroo: nó kiểm tra bằng nhận dạng giọng tiếng Anh.
