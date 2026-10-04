@@ -17,8 +17,41 @@ find_root() {  # B2V_ROOT, hoặc thư mục cha gần nhất có engine/explain
 }
 ROOT="$(find_root)"
 ENGINE="${B2V_ENGINE:-$ROOT/engine/explainroo-mac}"
-SLUG="${1:?Thiếu tên video: build.sh <slug> [--render]}"
-MODE="${2:-}"
+SLUG="${1:?Thiếu tên video: build.sh <slug> [--render] [--safe] [--workers N]}"
+RENDER=0
+SAFE=0
+WORKERS="${B2V_WORKERS:-}"
+
+for arg in "$@"; do
+  case "$arg" in
+    --render) RENDER=1 ;;
+    --safe|--eco) SAFE=1 ;;
+    --workers=*) WORKERS="${arg#*=}" ;;
+  esac
+done
+
+for ((i=1; i<=$#; i++)); do
+  val="${!i}"
+  if [ "$val" = "--workers" ]; then
+    next_i=$((i+1))
+    WORKERS="${!next_i:-}"
+  fi
+done
+
+# Tự động tính toán số worker an toàn nếu chưa chỉ định
+if [ -z "$WORKERS" ]; then
+  TOTAL_MEM_BYTES=$(sysctl -n hw.memsize 2>/dev/null || echo 17179869184)
+  TOTAL_MEM_GB=$((TOTAL_MEM_BYTES / 1073741824))
+  if [ "$SAFE" -eq 1 ] || [ "$TOTAL_MEM_GB" -le 8 ]; then
+    # Máy RAM <= 8GB hoặc bật cờ --safe: chạy 1 worker để tránh tràn RAM và đứng máy
+    WORKERS=1
+  elif [ "$TOTAL_MEM_GB" -le 16 ]; then
+    WORKERS=2
+  else
+    WORKERS=4
+  fi
+fi
+
 P="$ROOT/videos/$SLUG"
 ER=(node "$ENGINE/bin/explainroo.js")
 
@@ -52,9 +85,13 @@ rm -rf "$P/out/stills"
 echo "→ Mở và nhìn: $P/out/sheet.jpg (toàn video) và $P/out/stills/<cảnh>@end.png (khung cuối từng cảnh)."
 echo "  Soát: chữ đủ dấu, không đè nhau, không bị cắt, không xuống hàng xấu, khoanh/mũi tên trúng chỗ, mỗi cảnh có hình rõ."
 
-if [ "$MODE" = "--render" ]; then
-  echo "== Render MP4"
-  "${ER[@]}" render "$P" || { echo "LỖI render"; exit 1; }
+if [ "$RENDER" -eq 1 ]; then
+  TASK_PREFIX=()
+  if command -v taskpolicy >/dev/null 2>&1; then
+    TASK_PREFIX=(taskpolicy -c utility)
+  fi
+  echo "== Render MP4 (Workers: $WORKERS · QoS bảo vệ giao diện: ${TASK_PREFIX[*]:-Mặc định})"
+  "${TASK_PREFIX[@]}" "${ER[@]}" render "$P" --workers "$WORKERS" || { echo "LỖI render"; exit 1; }
   mkdir -p "$ROOT/samples"
   cp "$P/out/video.mp4" "$ROOT/samples/$SLUG.mp4"
   ffmpeg -v error -y -i "$P/out/video.mp4" -c:v libx264 -crf 28 -preset veryfast \
